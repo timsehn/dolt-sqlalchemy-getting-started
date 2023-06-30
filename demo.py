@@ -45,6 +45,11 @@ def main():
 
     print_commit_log(engine)
 
+    drop_table(engine, "employees_teams")
+    print_tables(engine)
+    dolt_reset_hard(engine)
+    print_tables(engine)
+
 def setup_database(engine):
     metadata_obj = MetaData()
 
@@ -133,7 +138,19 @@ def insert_data(engine):
     with engine.connect() as conn:
         conn.execute(stmt)
         conn.commit()
-    
+
+def drop_table(engine, table):
+    (employees, teams, employees_teams) = load_tables(engine)
+
+    if ( table == "employees"):
+        employees.drop(engine)
+    elif ( table ==  "teams" ):
+        teams.drop(engine)
+    elif ( table == "employees_teams" ):
+        employees_teams.drop(engine)
+    else:
+        print(table + ": Not found") 
+        
 def dolt_commit(engine, author, message):
     # Dolt exposes version control writes as procedures
     # Here, we use text to execute procedures.
@@ -165,7 +182,14 @@ def dolt_commit(engine, author, message):
         if ( commit ): 
             print("Created commit: " + commit )
 
-
+def dolt_reset_hard(engine):
+    with engine.connect() as conn:
+        results = conn.execute(
+            text("CALL DOLT_RESET('--hard')")
+        )
+        conn.commit()
+    
+            
 def print_commit_log(engine):
     # Examine a dolt system table: dolt_log using reflection
     metadata_obj = MetaData()
@@ -216,6 +240,7 @@ def print_diff(engine, table):
         for row in results:
             # I use a dictionary here because dolt_diff_<table> is a wide table
             row_dict = row._asdict()
+            # Then I use pprint to display the results
             pprint(row_dict)
     
 def print_tables(engine):
@@ -227,7 +252,6 @@ def print_tables(engine):
         for row in result:
             table = row[0]
             print("\t" + table)
-    
             
 def print_summary_table(engine):
     (employees, teams, employees_teams) = load_tables(engine)
