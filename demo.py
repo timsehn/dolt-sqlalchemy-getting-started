@@ -14,7 +14,6 @@ from sqlalchemy import (
 
 from pprint import pprint
 
-
 def main():
     engine = create_engine(
 	"mysql+mysqlconnector://root@127.0.0.1:3306/sql_alchemy_big_demo"
@@ -32,19 +31,23 @@ def main():
     # Examine a Dolt system table: dolt_log
     print_commit_log(engine)
 
+    # Load rows into the tables
     insert_data(engine)
 
     print_summary_table(engine)
 
+    # Show off dolt_status and dolt_diff
     print_status(engine)
     print_diff(engine, "employees")
 
+    # Dolt commit our changes
     dolt_commit(engine,
                 "Aaron <aaron@dolthub.com>",
                 "Inserted data into tables")
 
     print_commit_log(engine)
 
+    # Show off dolt_reset
     drop_table(engine, "employees_teams")
     print_tables(engine)
     dolt_reset_hard(engine)
@@ -94,7 +97,6 @@ def load_tables(engine):
                             autoload_with=engine)
 
     return (employees, teams, employees_teams)
-
 
 def insert_data(engine):
     # Start fresh so we can re-run this script
@@ -188,7 +190,6 @@ def dolt_reset_hard(engine):
             text("CALL DOLT_RESET('--hard')")
         )
         conn.commit()
-    
             
 def print_commit_log(engine):
     # Examine a dolt system table: dolt_log using reflection
