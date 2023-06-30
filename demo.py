@@ -41,9 +41,13 @@ def main():
 
     print_summary_table(engine)
 
+    print_status(engine)
+
     dolt_commit(engine,
                 "Aaron <aaron@dolthub.com>",
                 "Inserted data into tables")
+
+    print_commit_log(engine)
 
 def setup_database(engine):
     metadata_obj = MetaData()
@@ -78,14 +82,21 @@ def setup_database(engine):
 
     metadata_obj.create_all(engine)
 
-def insert_data(engine):
+def load_tables(engine):
     metadata_obj = MetaData()
-    
+
     employees = Table("employees", metadata_obj, autoload_with=engine)
     teams = Table("teams", metadata_obj, autoload_with=engine)
     employees_teams = Table("employees_teams",
                             metadata_obj,
                             autoload_with=engine)
+
+    return (employees, teams, employees_teams)
+
+
+def insert_data(engine):
+    # Start fresh so we can re-run this script
+    (employees, teams, employees_teams) = load_tables(engine)
     
     delete_employees_stmt = delete(employees)
     delete_teams_stmt = delete(teams)
@@ -176,17 +187,32 @@ def print_commit_log(engine):
             message     = row[2]
             print("\t" + commit_hash + ": " + message + " by " + author)
 
-def print_summary_table(engine):
+def print_status(engine):
     metadata_obj = MetaData()
-    
-    employees = Table("employees", metadata_obj, autoload_with=engine)
-    teams = Table("teams", metadata_obj, autoload_with=engine)
-    employees_teams = Table("employees_teams",
-                            metadata_obj,
-                            autoload_with=engine)
+    dolt_status = Table("dolt_status", metadata_obj, autoload_with=engine)
+
+    print("Status")
+    stmt = select(dolt_status.c.table_name, dolt_status.c.status)
+    with engine.connect() as conn:
+        results = conn.execute(stmt)
+        rows = results.fetchall();
+        if ( len(rows) > 0 ):
+            for row in rows:
+                table  = row[0]
+                status = row[1]
+                print("\t" + table + ": " + status)
+        else:
+            print("\tNo tables modified")
+
+def print_diff(engine, table):
+    pass
+            
+def print_summary_table(engine):
+    (employees, teams, employees_teams) = load_tables(engine)
 
     print("Team Summary")
-    
+
+    # Dolt supports up to 12 table joins. Here we do a 3 table join.
     stmt = select(employees.c.first_name,
                   employees.c.last_name,
                   teams.c.name
@@ -198,7 +224,7 @@ def print_summary_table(engine):
                   ).join(
                       teams,
                       teams.c.id == employees_teams.c.team_id
-                  ).order_by(teams.c.name.desc()); 
+                  ).order_by(teams.c.name.asc()); 
     with engine.connect() as conn:
         results = conn.execute(stmt)
         for row in results:
@@ -206,5 +232,5 @@ def print_summary_table(engine):
             last_name  = row[1]
             team_name  = row[2]
             print("\t" + team_name + ": " + first_name + " " + last_name)
-            
+
 main()
