@@ -216,6 +216,7 @@ def print_diff(engine, table):
         for row in results:
             # I use a dictionary here because dolt_diff_<table> is a wide table
             row_dict = row._asdict()
+            # Then I use pprint to di
             pprint(row_dict)
     
 def print_tables(engine):
