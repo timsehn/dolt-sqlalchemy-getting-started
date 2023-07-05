@@ -320,7 +320,6 @@ def dolt_reset_hard(engine, commit):
         stmt = text("CALL DOLT_RESET('--hard')")
         print("Resetting to HEAD")
 
-
     with engine.connect() as conn:
         results = conn.execute(stmt)
         conn.commit()
