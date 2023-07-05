@@ -64,8 +64,10 @@ def main():
 
     # Show off branch and merge
     dolt_create_branch(engine, 'modify_data')
-    engine = dolt_checkout('modify_data')
+
+    # Here we use dolt_checkout and see that it is scoped to a connection
     print_active_branch(engine)
+    engine = dolt_checkout('modify_data')
     modify_data(engine)
     print_status(engine)
     print_diff(engine, 'employees')
@@ -84,11 +86,17 @@ def main():
     print_diff(engine, "employees")
     dolt_commit(engine, 'Tim <tim@dolthub.com>', 'Modified schema on branch')
     print_commit_log(engine)
-    
+
+    # Show off merge
     engine = dolt_checkout('main')
     print_active_branch(engine)
     print_commit_log(engine)
     print_summary_table(engine)
+    dolt_merge(engine, 'modify_data')
+    print_commit_log(engine)
+    dolt_merge(engine, 'modify_schema')
+    print_commit_log(engine)
+    
     
 def reset_database(engine):
     metadata_obj = MetaData()
@@ -213,7 +221,7 @@ def modify_data(engine):
     delete_stmt = delete(employees_teams).where(
         employees_teams.c.employee_id == 0
     ).where(employees_teams.c.team_id == 1)
-    
+
     with engine.connect() as conn:
         conn.execute(update_stmt)
         conn.execute(insert_emp_stmt)
@@ -337,22 +345,27 @@ def dolt_checkout(branch):
     engine_base = "mysql+mysqlconnector://root@127.0.0.1:3306/sql_alchemy_big_demo"
     # Branches can be "checked out" via connection string. We make heavy use
     # of reflection in this example for system tables so passing around an
-    # engine instead of a connection is best for this example. We'll
-    # also show how to checkout a branch using call dolt_checkout() in
-    # the connect to branch function.
+    # engine instead of a connection is best for this example. 
     engine = create_engine(
     	engine_base + "/" + branch
     )
     print("Using branch: " + branch)
     return engine
 
-def connect_to_branch(engine, branch):
-    engine = create_engine(engine_base)
-    stmt = text("CALL DOLT_CHECKOUT('" + branch + "')")
+def dolt_merge(engine, branch):
+    stmt = text("CALL DOLT_MERGE('" + branch + "')")
     with engine.connect() as conn:
-        conn.execute(stmt)
-        return conn
-            
+        results = conn.execute(stmt)
+        rows = results.fetchall()
+        print(rows)
+        commit       = rows[0][0]
+        fast_forward = rows[0][1]
+        conflicts    = rows[0][2]
+        print("Merge Complete: " + branch)
+        print("\tCommit: " + commit)
+        print("\tFast Forward: " + str(fast_forward))
+        print("\tConflicts: " + str(conflicts))
+
 def print_commit_log(engine):
     # Examine a dolt system table, dolt_log, using reflection
     metadata_obj = MetaData()
