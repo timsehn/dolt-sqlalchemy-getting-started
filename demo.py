@@ -96,6 +96,7 @@ def main():
     print_commit_log(engine)
     dolt_merge(engine, 'modify_schema')
     print_commit_log(engine)
+    print_summary_table(engine)
     
     
 def reset_database(engine):
@@ -443,10 +444,19 @@ def print_summary_table(engine):
 
     print("Team Summary")
 
+    # Get all employees columns because we change the schema
+    columns = []
+    for column in employees.c:
+        if ( column.key == "id" ):
+            continue
+        columns.append(column.key)
+
+    # Must convert to tuple
+    columns = tuple(columns)
+
     # Dolt supports up to 12 table joins. Here we do a 3 table join.
-    stmt = select(employees.c.first_name,
-                  employees.c.last_name,
-                  teams.c.name
+    stmt = select(teams.c.name,
+                  employees.c[columns] 
                   ).select_from(
                       employees
                   ).join(
@@ -459,9 +469,14 @@ def print_summary_table(engine):
     with engine.connect() as conn:
         results = conn.execute(stmt)
         for row in results:
-            first_name = row[0]
+            team_name  = row[0]
             last_name  = row[1]
-            team_name  = row[2]
-            print("\t" + team_name + ": " + first_name + " " + last_name)
-
+            first_name = row[2]
+            start_date = ''
+            if ( len(row) > 3 ):
+                if ( row[3] ):
+                    start_date = row[3].strftime('%Y-%m-%d')
+                
+            print("\t" + team_name + ": " + first_name + " " + last_name + " " + start_date)
+            
 main()
