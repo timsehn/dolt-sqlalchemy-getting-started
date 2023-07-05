@@ -81,7 +81,7 @@ def main():
     modify_schema(engine)
     print_status(engine)
     print_diff(engine, "employees")
-    
+    dolt_commit(engine, 'Tim <tim@dolthub.com>', 'Modified schema on branch')
 
 def reset_database(engine):
     metadata_obj = MetaData()
