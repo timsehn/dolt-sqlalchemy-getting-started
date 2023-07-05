@@ -306,6 +306,7 @@ def dolt_commit(engine, author, message):
                  + "')")
         )
         commit = None
+        # Dolt stored procedures return results
         for row in result:
             commit = row[0]
         if ( commit ): 
