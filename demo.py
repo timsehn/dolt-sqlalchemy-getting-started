@@ -358,7 +358,6 @@ def dolt_merge(engine, branch):
     with engine.connect() as conn:
         results = conn.execute(stmt)
         rows = results.fetchall()
-        print(rows)
         commit       = rows[0][0]
         fast_forward = rows[0][1]
         conflicts    = rows[0][2]
