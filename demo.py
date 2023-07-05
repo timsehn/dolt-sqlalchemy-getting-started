@@ -72,9 +72,10 @@ def main():
     print_diff(engine, 'employees_teams')
     print_summary_table(engine)
     dolt_commit(engine, 'Brian <brian@dolthub.com>', 'Modified data on branch')
+    print_commit_log(engine)
 
     # Switch back to main because I want the same merge base
-    dolt_checkout('main')
+    engine = dolt_checkout('main')
     dolt_create_branch(engine, 'modify_schema')
     engine = dolt_checkout('modify_schema')
     print_active_branch(engine)
@@ -82,7 +83,13 @@ def main():
     print_status(engine)
     print_diff(engine, "employees")
     dolt_commit(engine, 'Tim <tim@dolthub.com>', 'Modified schema on branch')
-
+    print_commit_log(engine)
+    
+    engine = dolt_checkout('main')
+    print_active_branch(engine)
+    print_commit_log(engine)
+    print_summary_table(engine)
+    
 def reset_database(engine):
     metadata_obj = MetaData()
 
