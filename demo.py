@@ -19,6 +19,9 @@ def main():
 	"mysql+mysqlconnector://root@127.0.0.1:3306/sql_alchemy_big_demo"
     )
 
+    # Start fresh so we can re-run this script
+    reset_database(engine)
+    
     # Build our tables
     setup_database(engine)
 
@@ -50,13 +53,25 @@ def main():
     # Show off dolt_reset
     drop_table(engine, "employees_teams")
     print_tables(engine)
-    dolt_reset_hard(engine)
+    dolt_reset_hard(engine, None)
     print_tables(engine)
 
+def reset_database(engine):
+    metadata_obj = MetaData()
+
+    dolt_log = Table("dolt_log", metadata_obj, autoload_with=engine)
+    stmt = select(dolt_log.c.commit_hash).limit(1).order_by(dolt_log.c.date.asc())
+    with engine.connect() as conn:
+        results_obj = conn.execute(stmt)
+        results = results_obj.fetchall()
+        init_commit_hash = results[0][0]
+
+        dolt_reset_hard(engine, init_commit_hash)
+    
 def setup_database(engine):
     metadata_obj = MetaData()
 
-    # This is standard SQLAlchemy
+    # This is standard SQLAlchemy without the ORM
     employees_table = Table(
         "employees",
         metadata_obj,
@@ -99,18 +114,8 @@ def load_tables(engine):
     return (employees, teams, employees_teams)
 
 def insert_data(engine):
-    # Start fresh so we can re-run this script
     (employees, teams, employees_teams) = load_tables(engine)
     
-    delete_employees_stmt = delete(employees)
-    delete_teams_stmt = delete(teams)
-    delete_employees_teams_stmt = delete(employees_teams)
-    with engine.connect() as conn:
-        conn.execute(delete_employees_teams_stmt)
-        conn.execute(delete_employees_stmt)
-        conn.execute(delete_teams_stmt)
-        conn.commit()
-
     # This is standard SQLAlchemy
     stmt = insert(employees).values([
         {'id':0, 'last_name':'Sehn', 'first_name':'Tim'}, 
@@ -184,15 +189,18 @@ def dolt_commit(engine, author, message):
         if ( commit ): 
             print("Created commit: " + commit )
 
-def dolt_reset_hard(engine):
+def dolt_reset_hard(engine, commit):
+    if ( commit ):
+        stmt = text("CALL DOLT_RESET('--hard', '" + commit + "')")
+    else:
+        stmt = text("CALL DOLT_RESET('--hard')")
+    
     with engine.connect() as conn:
-        results = conn.execute(
-            text("CALL DOLT_RESET('--hard')")
-        )
+        results = conn.execute(stmt)
         conn.commit()
             
 def print_commit_log(engine):
-    # Examine a dolt system table: dolt_log using reflection
+    # Examine a dolt system table, dolt_log, using reflection
     metadata_obj = MetaData()
     print("Commit Log:")
 
