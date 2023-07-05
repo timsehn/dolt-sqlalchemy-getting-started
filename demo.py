@@ -86,6 +86,7 @@ def main():
     print_diff(engine, "employees")
     dolt_commit(engine, 'Tim <tim@dolthub.com>', 'Modified schema on branch')
     print_commit_log(engine)
+    print_summary_table(engine)
 
     # Show off merge
     engine = dolt_checkout('main')
