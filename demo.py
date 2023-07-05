@@ -5,6 +5,7 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
+    Date,
     select,
     insert,
     update,
@@ -12,6 +13,8 @@ from sqlalchemy import (
     ForeignKey,
     MetaData
 )
+
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 
 from pprint import pprint
 
@@ -73,11 +76,17 @@ def main():
     # Switch back to main because I want the same merge base
     dolt_checkout('main')
     dolt_create_branch(engine, 'modify_schema')
+    engine = dolt_checkout('modify_schema')
+    print_active_branch(engine)
+    modify_schema(engine)
+    print_status(engine)
+    print_diff(engine, "employees")
     
 
 def reset_database(engine):
     metadata_obj = MetaData()
 
+    # Here we find the first commit in the log and reset to that commit
     dolt_log = Table("dolt_log", metadata_obj, autoload_with=engine)
     stmt = select(dolt_log.c.commit_hash).limit(1).order_by(dolt_log.c.date.asc())
     with engine.connect() as conn:
@@ -90,6 +99,9 @@ def reset_database(engine):
 def delete_non_main_branches(engine):
     metadata_obj = MetaData()
 
+    # Iterate through the non-main branches and delete them with
+    # CALL DOLT_BRANCH('-D', '<branch>'). '-D' force deletes just in
+    # case I have some unmerged modifications from a failed run.
     dolt_branches = Table("dolt_branches", metadata_obj, autoload_with=engine)
     stmt = select(dolt_branches.c.name).where(dolt_branches.c.name != 'main')
     with engine.connect() as conn:
@@ -202,6 +214,44 @@ def modify_data(engine):
         conn.execute(delete_stmt)
         conn.commit()
 
+def modify_schema(engine):
+    (employees, teams, employees_teams) = load_tables(engine)
+
+    # SQLAlchemy does not support table alters so we use text
+    stmt = text('alter table employees add column start_date date')
+    with engine.connect() as conn:
+        conn.execute(stmt)
+        conn.commit()
+    
+    # Update using the SQL Alchemy session interface
+    class Base(DeclarativeBase):
+        pass
+
+    class Employee(Base):
+        __tablename__ = "employees"
+        id: Mapped[int] = mapped_column(primary_key=True)
+        last_name: Mapped[str] = mapped_column(String(255))
+        first_name: Mapped[str] = mapped_column(String(255))
+        start_date: Mapped[Date] = mapped_column(Date)
+
+        def __repr__(self) -> str:
+            return f"Employee(id={self.id!r}, last_name={self.last_name!r}, first_name={self.first_name!r}, start_date={self.start_date!r})"
+
+    session = Session(engine)
+    Tim = session.get(Employee, 0)
+    Tim.start_date = "2018-08-06"
+
+    Aaron = session.get(Employee, 1)
+    Aaron.start_date = "2018-08-06"
+
+    BHeni = session.get(Employee, 2)
+    BHeni.start_date = "2018-08-06"
+
+    Fitz = session.execute(select(Employee).filter_by(last_name="Fitzgerald")).scalar_one()
+    Fitz.start_date = "2021-04-19"
+    
+    session.commit()
+    
 def drop_table(engine, table):
     (employees, teams, employees_teams) = load_tables(engine)
 
