@@ -7,6 +7,7 @@ from sqlalchemy import (
     String,
     select,
     insert,
+    update,
     delete,
     ForeignKey,
     MetaData
@@ -15,12 +16,12 @@ from sqlalchemy import (
 from pprint import pprint
 
 def main():
-    engine = create_engine(
-	"mysql+mysqlconnector://root@127.0.0.1:3306/sql_alchemy_big_demo"
-    )
+    engine = dolt_checkout('main')
+    print_active_branch(engine)
 
     # Start fresh so we can re-run this script
     reset_database(engine)
+    delete_non_main_branches(engine)
     
     # Build our tables
     setup_database(engine)
@@ -52,9 +53,27 @@ def main():
 
     # Show off dolt_reset
     drop_table(engine, "employees_teams")
+    print_status(engine)
     print_tables(engine)
     dolt_reset_hard(engine, None)
+    print_status(engine)
     print_tables(engine)
+
+    # Show off branch and merge
+    dolt_create_branch(engine, 'modify_data')
+    engine = dolt_checkout('modify_data')
+    print_active_branch(engine)
+    modify_data(engine)
+    print_status(engine)
+    print_diff(engine, 'employees')
+    print_diff(engine, 'employees_teams')
+    print_summary_table(engine)
+    dolt_commit(engine, 'Brian <brian@dolthub.com>', 'Modified data on branch')
+
+    # Switch back to main because I want the same merge base
+    dolt_checkout('main')
+    dolt_create_branch(engine, 'modify_schema')
+    
 
 def reset_database(engine):
     metadata_obj = MetaData()
@@ -67,7 +86,20 @@ def reset_database(engine):
         init_commit_hash = results[0][0]
 
         dolt_reset_hard(engine, init_commit_hash)
-    
+
+def delete_non_main_branches(engine):
+    metadata_obj = MetaData()
+
+    dolt_branches = Table("dolt_branches", metadata_obj, autoload_with=engine)
+    stmt = select(dolt_branches.c.name).where(dolt_branches.c.name != 'main')
+    with engine.connect() as conn:
+        results = conn.execute(stmt)
+        for row in results:
+            branch = row[0];
+            print("Deleting branch: " + branch)
+            stmt = text("CALL DOLT_BRANCH('-D', '" + branch + "')")
+            conn.execute(stmt)
+        
 def setup_database(engine):
     metadata_obj = MetaData()
 
@@ -122,7 +154,7 @@ def insert_data(engine):
         {'id':1, 'last_name':'Hendriks', 'first_name':'Brian'}, 
         {'id':2, 'last_name':'Son', 'first_name':'Aaron'}, 
         {'id':3, 'last_name':'Fitzgerald', 'first_name':'Brian'}
-        ]);
+        ])
     with engine.connect() as conn:
         conn.execute(stmt)
         conn.commit()
@@ -144,6 +176,30 @@ def insert_data(engine):
     ])
     with engine.connect() as conn:
         conn.execute(stmt)
+        conn.commit()
+
+def modify_data(engine):
+    (employees, teams, employees_teams) = load_tables(engine)
+
+    update_stmt = update(employees).where(employees.c.first_name == 'Tim'
+                                          ).values(first_name='Timothy')
+    
+    insert_emp_stmt = insert(employees).values([
+        {'id':4, 'last_name':'Wilkins', 'first_name':'Daylon'}
+        ])
+    insert_et_stmt = insert(employees_teams).values([
+        {'employee_id':4, 'team_id':0}
+    ])
+
+    delete_stmt = delete(employees_teams).where(
+        employees_teams.c.employee_id == 0
+    ).where(employees_teams.c.team_id == 1)
+    
+    with engine.connect() as conn:
+        conn.execute(update_stmt)
+        conn.execute(insert_emp_stmt)
+        conn.execute(insert_et_stmt)
+        conn.execute(delete_stmt)
         conn.commit()
 
 def drop_table(engine, table):
@@ -169,7 +225,6 @@ def dolt_commit(engine, author, message):
     # conn.close()
     #
     # I like the text approach better.
-
     with engine.connect() as conn:
         # -A means all tables
         conn.execute(
@@ -192,12 +247,54 @@ def dolt_commit(engine, author, message):
 def dolt_reset_hard(engine, commit):
     if ( commit ):
         stmt = text("CALL DOLT_RESET('--hard', '" + commit + "')")
+        print("Resetting to commit: " + commit)
     else:
         stmt = text("CALL DOLT_RESET('--hard')")
-    
+        print("Resetting to HEAD")
+
+
     with engine.connect() as conn:
         results = conn.execute(stmt)
         conn.commit()
+
+def dolt_create_branch(engine, branch):
+    # Check if branch exists
+    metadata_obj = MetaData()
+
+    dolt_branches = Table("dolt_branches", metadata_obj, autoload_with=engine)
+    stmt = select(dolt_branches.c.name).where(dolt_branches.c.name == branch)
+    with engine.connect() as conn:
+        results = conn.execute(stmt)
+        rows = results.fetchall()
+        if ( len(rows) > 0 ):
+             print("Branch exists: " + branch)
+             return
+
+    # Create branch
+    stmt = text("CALL DOLT_BRANCH('" + branch + "')")
+    with engine.connect() as conn:
+        results = conn.execute(stmt)
+        print("Created branch: " + branch)
+
+def dolt_checkout(branch):
+    engine_base = "mysql+mysqlconnector://root@127.0.0.1:3306/sql_alchemy_big_demo"
+    # Branches can be "checked out" via connection string. We make heavy use
+    # of reflection in this example for system tables so passing around an
+    # engine instead of a connection is best for this example. We'll
+    # also show how to checkout a branch using call dolt_checkout() in
+    # the connect to branch function.
+    engine = create_engine(
+    	engine_base + "/" + branch
+    )
+    print("Using branch: " + branch)
+    return engine
+
+def connect_to_branch(engine, branch):
+    engine = create_engine(engine_base)
+    stmt = text("CALL DOLT_CHECKOUT('" + branch + "')")
+    with engine.connect() as conn:
+        conn.execute(stmt)
+        return conn
             
 def print_commit_log(engine):
     # Examine a dolt system table, dolt_log, using reflection
@@ -235,6 +332,14 @@ def print_status(engine):
         else:
             print("\tNo tables modified")
 
+def print_active_branch(engine):
+    stmt = text("select active_branch()")
+    with engine.connect() as conn:
+        results = conn.execute(stmt)
+        rows = results.fetchall()
+        active_branch = rows[0][0]
+        print("Active branch: " + active_branch)
+            
 def print_diff(engine, table):
     metadata_obj = MetaData()
 
@@ -243,7 +348,8 @@ def print_diff(engine, table):
                       metadata_obj,
                       autoload_with=engine)
 
-    stmt = select(dolt_diff)
+    # Show only working set changes
+    stmt = select(dolt_diff).where(dolt_diff.c.to_commit == 'WORKING')
     with engine.connect() as conn:
         results = conn.execute(stmt)
         for row in results:
