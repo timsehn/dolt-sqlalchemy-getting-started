@@ -90,6 +90,7 @@ def main():
     print_commit_log(engine)
     print_summary_table(engine)
     dolt_merge(engine, 'modify_data')
+    print_summary_table(engine)
     print_commit_log(engine)
     dolt_merge(engine, 'modify_schema')
     print_commit_log(engine)
