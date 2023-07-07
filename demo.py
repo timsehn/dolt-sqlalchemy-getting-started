@@ -28,7 +28,6 @@ def main():
     
     # Build our tables
     setup_database(engine)
-
     print_tables(engine)
             
     # Our first Dolt feature. This will commit the first time
@@ -64,9 +63,6 @@ def main():
 
     # Show off branch and merge
     dolt_create_branch(engine, 'modify_data')
-
-    # Here we use dolt_checkout and see that it is scoped to a connection
-    print_active_branch(engine)
     engine = dolt_checkout('modify_data')
     modify_data(engine)
     print_status(engine)
@@ -84,9 +80,9 @@ def main():
     modify_schema(engine)
     print_status(engine)
     print_diff(engine, "employees")
+    print_summary_table(engine)
     dolt_commit(engine, 'Tim <tim@dolthub.com>', 'Modified schema on branch')
     print_commit_log(engine)
-    print_summary_table(engine)
 
     # Show off merge
     engine = dolt_checkout('main')
